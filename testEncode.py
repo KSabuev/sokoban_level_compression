@@ -1,11 +1,11 @@
 from typing import List
 
-# Коды объектов
+# коды объектов
 VOID = 0
 WALL = 1
 BOX = 2
 PLACE = 3
-MAN = 4
+MAN = 4  # заменяется на VOID
 
 class BitWriter:
     def __init__(self):
@@ -38,22 +38,33 @@ class BitWriter:
 
 class LevelEncoder:
     def __init__(self, level: List[List[int]]):
-        self.level = level
+        self.original_level = level
         self.height = len(level)
         self.width = len(level[0]) if level else 0
-        self.flat = [cell for row in level for cell in row]
+        self.level = [row[:] for row in level]
+        self.man_x = -1
+        self.man_y = -1
+        self._find_and_replace_man()
+        self.flat = [cell for row in self.level for cell in row]
+
+    def _find_and_replace_man(self):
+        for y, row in enumerate(self.level):
+            for x, value in enumerate(row):
+                if value == MAN:
+                    self.man_x = x
+                    self.man_y = y
+                    self.level[y][x] = VOID  # Заменяем на VOID
+                    return
+        raise ValueError("Игрок (MAN) не найден на карте")
 
     def encode(self) -> List[int]:
         writer = BitWriter()
-        # Размеры
+        # размеры карты
         writer.write_bits(self.width, 8)
         writer.write_bits(self.height, 8)
-
-        for row_index, row in enumerate(level):
-            for col_index, value in enumerate(row):
-                if value == 4:
-                    writer.write_bits(col_index, 8)
-                    writer.write_bits(row_index, 8)
+        # координаты игрока
+        writer.write_bits(self.man_x, 8)
+        writer.write_bits(self.man_y, 8)
 
         i = 0
         while i < len(self.flat):
@@ -66,39 +77,21 @@ class LevelEncoder:
 
             if run_length > 1:
                 writer.write_bits(1, 1)  # Признак повтора
-                # Повтор от 2 до 9
-                code = run_length - 2
-                writer.write_bits(code, 3)
+                writer.write_bits(run_length - 2, 3)  # от 0 до 7
             else:
                 writer.write_bits(0, 1)
 
-            # Код объекта
-            if current == VOID:
-                writer.write_bits(0, 1)
-                writer.write_bits(0, 1)
-            elif current == WALL:
-                writer.write_bits(0, 1)
-                writer.write_bits(1, 1)
-            elif current == BOX:
-                writer.write_bits(1, 1)
-                writer.write_bits(0, 1)
-            elif current == PLACE:
-                writer.write_bits(1, 1)
-                writer.write_bits(1, 1)
-                writer.write_bits(0, 1)
-            elif current == MAN:
-                writer.write_bits(1, 1)
-                writer.write_bits(1, 1)
-                writer.write_bits(1, 1)
-            else:
+            # код объекта: 2 бита
+            if current not in (VOID, WALL, BOX, PLACE):
                 raise ValueError(f"Неизвестный объект: {current}")
+            writer.write_bits(current, 2)
 
             i += run_length
 
         return writer.get_bytes()
 
 if __name__ == "__main__":
-    level =  [
+    level = [
         [1, 1, 1, 1, 1, 1, 1],
         [1, 3, 0, 3, 0, 3, 1],
         [1, 0, 2, 2, 2, 0, 1],
@@ -111,3 +104,7 @@ if __name__ == "__main__":
     encoder = LevelEncoder(level)
     encoded_bytes = encoder.encode()
     print('[' + ', '.join(f'0x{byte:02X}' for byte in encoded_bytes) + ']')
+
+    # [0x07, 0x07, 0x03, 0x03, 0xE5, 0x86, 0x1C, 0x22, 0x61, 0x0B, 0x41, 0x38, 0x44, 0xC2, 0x16, 0x18, 0x7C, 0x80]
+    # [0x07, 0x07, 0x03, 0x03, 0xE5, 0x83, 0x06, 0x84, 0x4C, 0x21, 0x64, 0x13, 0x42, 0x26, 0x10, 0xB0, 0x60, 0xDC, 0x80,
+    #  0x00]

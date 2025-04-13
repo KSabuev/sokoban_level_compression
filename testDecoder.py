@@ -45,23 +45,18 @@ class LevelDecoder:
 
         m = 0
         while m < total_cells:
-            # Повторы
-            if self.load_bit(1):
-                bufer = self.load_bit(3)
-                n_replay = 2 + ((bufer >> 2) & 1) * 4 + ((bufer >> 1) & 1) * 2 + (bufer & 1)
+            # Признак повтора
+            is_repeat = self.load_bit(1)
+            if is_repeat:
+                repeat_code = self.load_bit(3)
+                n_replay = repeat_code + 2  # от 2 до 9
             else:
                 n_replay = 1
 
-            # Элемент
-            if self.load_bit(1):
-                if self.load_bit(1):
-                    element = MAN if self.load_bit(1) else PLACE
-                else:
-                    element = BOX
-            elif self.load_bit(1):
-                element = WALL
-            else:
-                element = VOID
+            # 2 бита — тип объекта
+            element = self.load_bit(2)
+            if element not in (VOID, WALL, BOX, PLACE):
+                raise ValueError(f"Некорректный объект: {element}")
 
             for _ in range(n_replay):
                 x = m % size_x
@@ -69,7 +64,9 @@ class LevelDecoder:
                 if y < size_y:
                     level[y][x] = element
                 m += 1
-        level[user_y][user_x] = 4
+
+        # Вставляем игрока
+        level[user_y][user_x] = MAN
         return level
 
     @staticmethod
@@ -81,8 +78,7 @@ class LevelDecoder:
 
 if __name__ == "__main__":
     encoded_level = \
-        [0x07, 0x07, 0x03, 0x03, 0xE5, 0x83, 0x06, 0x84, 0x4C, 0x21, 0x64, 0xE9, 0xA1, 0x13, 0x08, 0x58, 0x30, 0x6E,
-         0x40, 0x00]
+        [0x07, 0x07, 0x03, 0x03, 0xE5, 0x86, 0x1C, 0x22, 0x61, 0x0B, 0x41, 0x38, 0x44, 0xC2, 0x16, 0x18, 0x7C, 0x80]
 
     decoder = LevelDecoder(encoded_level)
     level = decoder.decode()
